@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Chat Interface</title>
+  <link rel="stylesheet" href="./static/styles.css">
+</head>
+<body>
+  <div class="chat-container">
+    <header class="chat-header">
+      <div class="logo">
+        <img src="./static/logo.png" alt="Logo" class="logo-image">
+        <span class="header-text">National Bureau of Revenue AI</span>
+      </div>
+    </header>
+
+    <div class="chat-body" id="chat-body">
+      <div class="chat-message">
+        <p>Hi! I'm National Bureau of Revenue's AI assistant, how can I help you?</p>
+        <span class="timestamp" id="timestamp"></span>
+      </div>
+    </div>
+
+    <div class="chat-footer">
+      <div class="input-box">
+        <button class="attachment-button" title="Attach a file">📎</button>
+        <input type="text" placeholder="Type here..." class="chat-input" id="question-input">
+        <button class="voice-button" title="Use voice input">🎙️</button>
+      </div>
+      <button class="send-button" id="ask-button">Send</button>
+    </div>
+  </div>
+
+  <!-- Modal for File Upload -->
+  <div class="modal" id="fileModal">
+    <div class="modal-content">
+      <span class="close-button" id="closeModal">&times;</span>
+      <h2>Upload PDF Files</h2>
+      <div class="attachment-box">
+        <label for="file-upload" class="drag-drop-label">
+          Drag files here or 
+          <span class="browse-link">browse</span>
+        </label>
+        <input id="file-upload" type="file" accept=".pdf" class="file-input" multiple>
+      </div>
+      <button class="submit-button" id="submit-file">Submit</button>
+    </div>
+  </div>
+
+  <p id="upload-status"></p>
+  <p id="answer"></p>
+
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <script>
+    // Modal functionality
+    const attachmentButton = document.querySelector('.attachment-button');
+    const fileModal = document.querySelector('#fileModal');
+    const closeModal = document.querySelector('#closeModal');
+    const fileInput = document.querySelector('#file-upload');
+
+    attachmentButton.addEventListener('click', () => {
+      fileModal.style.display = 'block';
+    });
+
+    closeModal.addEventListener('click', () => {
+      fileModal.style.display = 'none';
+    });
+
+    window.addEventListener('click', (event) => {
+      if (event.target === fileModal) {
+        fileModal.style.display = 'none';
+      }
+    });
+
+    // File submission to the chatbot_ingest API
+    const submitFileButton = document.querySelector('#submit-file');
+    const uploadStatus = document.querySelector('#upload-status');
+
+    submitFileButton.addEventListener('click', async () => {
+      if (fileInput.files.length > 0) {
+        const formData = new FormData();
+
+        // Append all selected files to FormData
+        for (let i = 0; i < fileInput.files.length; i++) {
+          formData.append("files", fileInput.files[i]);
+        }
+
+        try {
+          uploadStatus.textContent = 'Uploading...';
+
+          const response = await axios.post('http://127.0.0.1:8000/api/chatbot_ingest/', formData, {
+            headers: {
+              'Content-Type': 'multipart/form-data', // No Authorization header here
+            }
+          });
+
+          uploadStatus.textContent = 'Files uploaded successfully: ' + response.data.messages.join(", ");
+          fileModal.style.display = 'none';
+        } catch (error) {
+          uploadStatus.textContent = 'Error uploading files: ' + error.message;
+        }
+      } else {
+        alert('Please upload at least one file!');
+      }
+    });
+
+    // Voice-to-text functionality
+    const voiceButton = document.querySelector('.voice-button');
+    const chatInput = document.querySelector('.chat-input');
+
+    voiceButton.addEventListener('click', () => {
+      if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const recognition = new SpeechRecognition();
+
+        recognition.lang = 'en-US';
+        recognition.start();
+
+        recognition.onresult = (event) => {
+          const transcript = event.results[0][0].transcript;
+          chatInput.value = transcript;
+        };
+
+        recognition.onerror = (event) => {
+          console.error('Speech recognition error:', event.error);
+        };
+      } else {
+        alert('Speech recognition is not supported in this browser.');
+      }
+    });
+
+    // Function to get the current time in the format HH:MM AM/PM
+    function getCurrentTime() {
+      const now = new Date();
+      let hours = now.getHours();
+      const minutes = now.getMinutes();
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12 || 12; // Convert 24-hour time to 12-hour time
+      const formattedMinutes = minutes < 10 ? `0${minutes}` : minutes;
+      return `${hours}:${formattedMinutes} ${ampm}`;
+    }
+
+    // Function to update chat history
+    function addMessageToChat(sender, message) {
+      const chatBody = document.getElementById('chat-body');
+      const messageElement = document.createElement('div');
+      messageElement.classList.add('chat-message');
+      const time = getCurrentTime();
+      messageElement.innerHTML = ` 
+        <p><strong>${sender}:</strong> ${message}</p>
+        <span class="timestamp">${time}</span>
+      `;
+      chatBody.appendChild(messageElement);
+      chatBody.scrollTop = chatBody.scrollHeight;  // Scroll to the latest message
+    }
+
+    // Send message to the chatbot_query API
+    const askButton = document.getElementById('ask-button');
+    const questionInput = document.getElementById('question-input');
+
+    askButton.addEventListener('click', async () => {
+      const question = questionInput.value.trim();
+      if (!question) {
+        alert('Please enter a question');
+        return;
+      }
+
+      // Add user's message to chat
+      addMessageToChat('User', question);
+
+      try {
+        const response = await axios.post('http://127.0.0.1:8000/api/chatbot_query', {
+          question: question
+        });
+
+        const answer = response.data.answer;
+        // Add bot's response to chat
+        addMessageToChat('Bot', answer);
+      } catch (error) {
+        addMessageToChat('Bot', 'Error: ' + error.message);
+      }
+    });
+  </script>
+</body>
+</html>

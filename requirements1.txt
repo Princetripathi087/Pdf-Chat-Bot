@@ -1,0 +1,13 @@
+pdfminer
+unstructured
+pdfminer.six
+pi-heif
+unstructured-inference
+pdf2image
+unstructured[ocr]
+unstructured_pytesseract
+googletrans
+google-generativeai
+deep-translator
+langdetect
+
